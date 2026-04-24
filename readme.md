@@ -136,6 +136,10 @@ WiFi adapter (monitor mode)
 - **Single antenna perspective** — even with 2x2 MIMO, the driver reports a single combined RSSI. No spatial diversity within a single adapter.
 - **Neighbor interference** — dense apartment environments have lots of signal variation from other people's movement, not just yours.
 
+## Acknowledgments
+
+Inspired by [RuView](https://github.com/ruvnet/RuView), an edge AI perception system that uses WiFi CSI for full body pose estimation. This project takes the RSSI-based sensing concepts from RuView's pipeline and adapts them for consumer WiFi adapters that don't expose CSI data.
+
 ## License
 
 MIT
