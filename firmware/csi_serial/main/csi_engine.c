@@ -44,7 +44,7 @@ static int   s_prev_ok = 0;
 
 /* CSI processing */
 static void process_csi(wifi_csi_info_t *info) {
-    if (g_imu.device_moving) {
+    if (0 && g_imu.device_moving) {
         g_csi.state = "DEV MOVE";
         g_csi.confidence = 0;
         return;

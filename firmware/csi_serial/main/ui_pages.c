@@ -227,19 +227,118 @@ void ui_page_waveforms(void)
     /* Header */
     lcd_rect(0, y, LCD_W, 16, C_DKG);
     lcd_str(50, y + 1, "WAVEFORMS", C_CYN, 2);
-    y += 20;
+    y += 18;
+
+    /* Motion intensity label */
+    float motion_norm = g_csi.motion_power / 64.0f;
+    lcd_rect(0, y, LCD_W, 10, C_BLK);
+    if (motion_norm < 1.0f)
+    {
+        lcd_str(4, y + 1, "CALM", C_GRN, 1);
+    }
+    else if (motion_norm < 5.0f)
+    {
+        lcd_str(4, y + 1, "LIGHT MOTION", C_YEL, 1);
+    }
+    else
+    {
+        lcd_str(4, y + 1, "HEAVY MOTION", C_RED, 1);
+    }
+
+    /* Estimated breathing rate (zero-crossing method) */
+    if (g_csi.breathing_power > 1.0f)
+    {
+        int np_tmp = g_csi.hist_idx < CSI_HIST ? g_csi.hist_idx : CSI_HIST;
+        int crossings = 0;
+        if (np_tmp > 4)
+        {
+            int st_tmp = g_csi.hist_idx % CSI_HIST;
+            float prev = g_csi.phase_hist[st_tmp];
+            for (int i = 1; i < np_tmp; i++)
+            {
+                float cur = g_csi.phase_hist[(st_tmp + i) % CSI_HIST];
+                if ((prev < 0.0f && cur >= 0.0f) || (prev >= 0.0f && cur < 0.0f))
+                {
+                    crossings++;
+                }
+                prev = cur;
+            }
+        }
+        /* sample rate ~10 Hz, 64 samples = ~6.4 s window */
+        /* half-crossings -> cycles; BPM = (crossings/2) / (n/10) * 60 */
+        int bpm = 0;
+        if (crossings > 0 && np_tmp > 0)
+        {
+            /* bpm = crossings * 10 * 60 / (2 * np_tmp) */
+            bpm = (crossings * 300) / np_tmp;
+        }
+        if (bpm < 4)
+        {
+            bpm = 4;
+        }
+        if (bpm > 40)
+        {
+            bpm = 40;
+        }
+        snprintf(buf, sizeof(buf), "~%d BPM", bpm);
+        lcd_rect(140, y, 96, 10, C_BLK);
+        lcd_str(140, y + 1, buf, C_GRN, 1);
+    }
+    else
+    {
+        lcd_rect(140, y, 96, 10, C_BLK);
+        lcd_str(140, y + 1, "NO BREATHING", C_DKG, 1);
+    }
+    y += 12;
 
     int np = g_csi.hist_idx < CSI_HIST ? g_csi.hist_idx : CSI_HIST;
 
-    /* Amplitude waveform */
-    lcd_str(4, y, "AMPLITUDE", C_CYN, 1);
-    /* Current value */
-    if (np > 0)
+    /* Amplitude waveform (SIGNAL) */
+    lcd_rect(0, y, LCD_W, 9, C_BLK);
+    lcd_str(4, y, "SIGNAL", C_CYN, 1);
+
+    /* Std dev of last 16 samples to classify signal */
+    if (np >= 4)
     {
-        int last = (g_csi.hist_idx - 1 + CSI_HIST) % CSI_HIST;
-        snprintf(buf, sizeof(buf), "%.1f", (double)g_csi.amp_hist[last]);
-        lcd_rect(160, y, 76, 8, C_BLK);
-        lcd_str(160, y, buf, C_WHT, 1);
+        int nsamp = np < 16 ? np : 16;
+        int st16 = (g_csi.hist_idx - nsamp + CSI_HIST * 2) % CSI_HIST;
+        float sum16 = 0.0f;
+        for (int i = 0; i < nsamp; i++)
+        {
+            sum16 += g_csi.amp_hist[(st16 + i) % CSI_HIST];
+        }
+        float mean16 = sum16 / (float)nsamp;
+        float var16 = 0.0f;
+        for (int i = 0; i < nsamp; i++)
+        {
+            float d = g_csi.amp_hist[(st16 + i) % CSI_HIST] - mean16;
+            var16 += d * d;
+        }
+        var16 /= (float)nsamp;
+        /* simple integer sqrt approximation */
+        float std16 = 0.0f;
+        float guess = var16 / 2.0f + 0.5f;
+        if (guess < 0.001f)
+        {
+            guess = 0.001f;
+        }
+        /* 3 Newton iterations */
+        guess = (guess + var16 / guess) * 0.5f;
+        guess = (guess + var16 / guess) * 0.5f;
+        guess = (guess + var16 / guess) * 0.5f;
+        std16 = guess;
+        if (std16 < 1.0f)
+        {
+            lcd_str(150, y, "STABLE", C_GRN, 1);
+        }
+        else if (std16 < 5.0f)
+        {
+            lcd_str(138, y, "CHANGING", C_YEL, 1);
+        }
+        else
+        {
+            lcd_str(132, y, "DISRUPTED", C_RED, 1);
+        }
     }
     y += 10;
 
@@ -251,27 +350,31 @@ void ui_page_waveforms(void)
         {
             ord[i] = g_csi.amp_hist[(st + i) % CSI_HIST];
         }
-        lcd_wave(4, y, 232, 70, ord, np, C_CYN);
+        lcd_wave(4, y, 232, 55, ord, np, C_CYN);
     }
     else
     {
-        lcd_rect(4, y, 232, 70, C_BLK);
-        lcd_str(70, y + 30, "NO DATA", C_DKG, 1);
+        lcd_rect(4, y, 232, 55, C_BLK);
+        lcd_str(70, y + 24, "NO DATA", C_DKG, 1);
     }
-    y += 75;
+    y += 57;
 
     /* Separator */
     lcd_rect(0, y, LCD_W, 1, C_DKG);
-    y += 5;
+    y += 4;
 
-    /* Phase rate waveform */
-    lcd_str(4, y, "PHASE RATE", C_GRN, 1);
-    if (np > 0)
+    /* Phase rate waveform (BODY MOTION) */
+    lcd_rect(0, y, LCD_W, 9, C_BLK);
+    lcd_str(4, y, "BODY MOTION", C_GRN, 1);
+
+    /* Show BREATHING label if breathing detected */
+    if (g_csi.breathing_power > 1.0f)
     {
-        int last = (g_csi.hist_idx - 1 + CSI_HIST) % CSI_HIST;
-        snprintf(buf, sizeof(buf), "%.1f", (double)g_csi.phase_hist[last]);
-        lcd_rect(160, y, 76, 8, C_BLK);
-        lcd_str(160, y, buf, C_WHT, 1);
+        lcd_str(152, y, "BREATHING", C_GRN, 1);
+    }
+    else
+    {
+        lcd_rect(152, y, 84, 9, C_BLK);
     }
     y += 10;
 
@@ -283,14 +386,25 @@ void ui_page_waveforms(void)
         {
             ord[i] = g_csi.phase_hist[(st + i) % CSI_HIST];
         }
-        lcd_wave(4, y, 232, 70, ord, np, C_GRN);
+        lcd_wave(4, y, 232, 55, ord, np, C_GRN);
     }
     else
     {
-        lcd_rect(4, y, 232, 70, C_BLK);
-        lcd_str(70, y + 30, "NO DATA", C_DKG, 1);
+        lcd_rect(4, y, 232, 55, C_BLK);
+        lcd_str(70, y + 24, "NO DATA", C_DKG, 1);
     }
-    y += 75;
+    y += 57;
+
+    /* Separator */
+    lcd_rect(0, y, LCD_W, 1, C_DKG);
+    y += 4;
+
+    /* State + direction + occupancy summary */
+    lcd_rect(0, y, LCD_W, 9, C_BLK);
+    snprintf(buf, sizeof(buf), "STATE:%s DIR:%s OCC:%d",
+             g_csi.state, g_csi.motion_direction, g_csi.occupancy_estimate);
+    lcd_str(4, y, buf, C_LTG, 1);
+    y += 11;
 
     /* Clear below */
     if (y < 258)

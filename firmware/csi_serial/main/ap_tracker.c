@@ -15,13 +15,14 @@ void ap_tracker_update(const uint8_t *bssid, const char *ssid,
 
     /* Check if BSSID already tracked */
     for (i = 0; i < AP_MAX_TRACKED; i++) {
-        if (g_ap_tracker.aps[i].active &&
+        if (
             memcmp(g_ap_tracker.aps[i].bssid, bssid, 6) == 0) {
             g_ap_tracker.aps[i].rssi         = rssi;
             g_ap_tracker.aps[i].channel      = channel;
             g_ap_tracker.aps[i].variance     = variance;
             g_ap_tracker.aps[i].last_seen_us = now;
             g_ap_tracker.aps[i].frame_count++;
+            g_ap_tracker.aps[i].active = 1;
             if (ssid && ssid[0] != '\0') {
                 strncpy(g_ap_tracker.aps[i].ssid, ssid, 32);
                 g_ap_tracker.aps[i].ssid[32] = '\0';
